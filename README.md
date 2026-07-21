@@ -72,6 +72,12 @@ This repository now includes an initial Playwright + TypeScript automation frame
   npm run test:smoke
   ```
 
+- Run regression tests:
+
+  ```bash
+  npm run test:regression
+  ```
+
 - Run only desktop tests:
 
   ```bash
@@ -176,13 +182,15 @@ Example usage:
 npm run qa:runner -- --list
 npm run qa:runner -- --project desktop-chromium --tags "@smoke|@desktop"
 npm run qa:runner -- --project mobile-webkit --open-report
+npm run qa:runner -- --env staging --tags "@regression"
 ```
 
 The runner currently supports:
 
 - listing tests
-- project filtering
+- project filtering (browser/device via Playwright projects)
 - tag/name filtering
+- environment selection via `--env <name>` (resolves `BASE_URL_<NAME>`, falls back to `BASE_URL`)
 - opening report after execution
 
 It can be expanded into a UI wrapper later (web or desktop) without changing test design.

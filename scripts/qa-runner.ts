@@ -7,6 +7,7 @@ type CliOptions = {
   project?: string;
   grep?: string;
   config?: string;
+  env?: string;
   headed: boolean;
 };
 
@@ -24,13 +25,38 @@ function parseArgs(argv: string[]): CliOptions {
     project: getValue("--project"),
     grep: getValue("--grep"),
     config: getValue("--config"),
+    env: getValue("--env"),
     headed: args.has("--headed"),
   };
 }
 
-function runCommand(command: string, commandArgs: string[]): number {
-  const result = spawnSync(command, commandArgs, { stdio: "inherit", shell: false });
+function runCommand(
+  command: string,
+  commandArgs: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const result = spawnSync(command, commandArgs, { stdio: "inherit", shell: false, env });
   return result.status ?? 1;
+}
+
+// Resolve a named environment (for example --env staging) to the matching
+// BASE_URL_<NAME> variable so QA can switch targets without editing .env.
+function resolveEnv(options: CliOptions): NodeJS.ProcessEnv {
+  const childEnv: NodeJS.ProcessEnv = { ...process.env };
+
+  if (options.env) {
+    const key = `BASE_URL_${options.env.toUpperCase()}`;
+    const resolved = process.env[key];
+
+    if (resolved) {
+      childEnv.BASE_URL = resolved;
+    } else {
+      // eslint-disable-next-line no-console
+      console.warn(`--env "${options.env}" requested but ${key} is not set. Falling back to BASE_URL.`);
+    }
+  }
+
+  return childEnv;
 }
 
 function buildPlaywrightArgs(options: CliOptions): string[] {
@@ -77,6 +103,7 @@ Options:
   --tags <pattern>        Apply tag-based grep pattern (example: "@smoke|@mobile")
   --grep <pattern>        Generic grep pattern for test names
   --config <file>         Use a custom Playwright config file
+  --env <name>            Target a named environment via BASE_URL_<NAME> (example: staging)
   --headed                Run in headed mode
   --open-report           Open the HTML report after execution
   --help                  Show this help
@@ -91,10 +118,11 @@ function main(): void {
   }
 
   const options = parseArgs(argv);
-  const exitCode = runCommand("npx", buildPlaywrightArgs(options));
+  const childEnv = resolveEnv(options);
+  const exitCode = runCommand("npx", buildPlaywrightArgs(options), childEnv);
 
   if (options.openReport) {
-    runCommand("npx", ["playwright", "show-report"]);
+    runCommand("npx", ["playwright", "show-report"], childEnv);
   }
 
   process.exit(exitCode);
