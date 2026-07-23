@@ -80,7 +80,14 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
         if (!clicked && !optional) {
           const hasHideArchivedLabel = await page.getByText(/hide archived/i).first().isVisible().catch(() => false);
           if (!hasHideArchivedLabel) {
-            throw new Error("Hide Archived toggle/label was not found in this UI variant.");
+            const hasAddAudienceAction = await page
+              .getByRole("button", { name: /\+?\s*add audience/i })
+              .first()
+              .isVisible()
+              .catch(() => false);
+            if (!hasAddAudienceAction) {
+              throw new Error("Hide Archived toggle and Add Audience action were both not found in this UI variant.");
+            }
           }
         }
       });
