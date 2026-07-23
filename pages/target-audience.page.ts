@@ -99,7 +99,27 @@ export class TargetAudiencePage {
     }
 
     await expect(locator).toBeVisible();
-    await locator.click();
+    try {
+      await locator.click();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const pointerIntercepted =
+        message.includes("intercepts pointer events") || message.includes("subtree intercepts pointer events");
+
+      if (!pointerIntercepted) {
+        throw error;
+      }
+
+      // UI controls like react-switch can expose visible child nodes that intercept
+      // pointer events on the container. Fall back to force click, then DOM click.
+      try {
+        await locator.click({ force: true });
+      } catch {
+        await locator.evaluate((element) => {
+          (element as HTMLElement).click();
+        });
+      }
+    }
     return true;
   }
 
