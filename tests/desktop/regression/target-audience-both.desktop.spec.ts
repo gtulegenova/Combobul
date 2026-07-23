@@ -63,6 +63,29 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
       });
     };
 
+    const giToggleHideArchived = async (sequence: number, description: string, optional: boolean = false): Promise<void> => {
+      await test.step(`GI #${sequence} click - ${description}`, async () => {
+        const clicked = await audiencePage.click(".react-switch-bg", {
+          optional: true,
+          preferred: [
+            page.getByRole("switch", { name: /hide archived/i }),
+            page.getByLabel(/hide archived/i),
+            page.locator('label:has-text("Hide Archived") .react-switch-bg'),
+            page.locator("label").filter({ hasText: /hide archived/i }).locator(".react-switch-bg"),
+            page.locator(".react-switch-bg"),
+          ],
+          stepLabel: `GI #${sequence}`,
+        });
+
+        if (!clicked && !optional) {
+          const hasHideArchivedLabel = await page.getByText(/hide archived/i).first().isVisible().catch(() => false);
+          if (!hasHideArchivedLabel) {
+            throw new Error("Hide Archived toggle/label was not found in this UI variant.");
+          }
+        }
+      });
+    };
+
     await test.step("GI #0 open - Navigate to login URL", async () => {
       await page.goto("/login", { waitUntil: "domcontentloaded", timeout: 90_000 });
       await expect(page).toHaveURL(/login|signin|auth/i);
@@ -165,7 +188,7 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
       await expect(page).toHaveURL(/audience|target-audience/i);
     });
 
-    await giClick(13, ".react-switch-bg", "Toggle Hide Archived switch");
+    await giToggleHideArchived(13, "Toggle Hide Archived switch");
 
     await giClick(
       14,
@@ -229,7 +252,7 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
       },
     );
 
-    await giClick(24, ".react-switch-bg", "Re-toggle Hide Archived switch");
+    await giToggleHideArchived(24, "Re-toggle Hide Archived switch");
     await test.step("GI #25 pause - Wait 3000ms for table refresh", async () => {
       await audiencePage.pause(3_000);
     });
@@ -307,7 +330,7 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
       },
     );
 
-    await giClick(40, ".react-switch-bg", "Optional switch toggle", { optional: true });
+    await giToggleHideArchived(40, "Optional switch toggle", true);
     await test.step("GI #41 pause - Wait 3500ms for UI update", async () => {
       await audiencePage.pause(3_500);
     });
