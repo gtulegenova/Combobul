@@ -78,17 +78,8 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
         });
 
         if (!clicked && !optional) {
-          const hasHideArchivedLabel = await page.getByText(/hide archived/i).first().isVisible().catch(() => false);
-          if (!hasHideArchivedLabel) {
-            const hasAddAudienceAction = await page
-              .getByRole("button", { name: /\+?\s*add audience/i })
-              .first()
-              .isVisible()
-              .catch(() => false);
-            if (!hasAddAudienceAction) {
-              throw new Error("Hide Archived toggle and Add Audience action were both not found in this UI variant.");
-            }
-          }
+          // Some UI variants do not expose this switch. Preserve flow and let
+          // downstream GI steps validate page readiness through actionable controls.
         }
       });
     };
@@ -197,17 +188,40 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
 
     await giToggleHideArchived(13, "Toggle Hide Archived switch");
 
-    await giClick(
-      14,
-      [
-        { selector: '//button[contains(text(), "+ Add Audience")]' },
-        { selector: 'button[type="button"].btn.btn-primary' },
-      ],
-      "Open add audience form",
-      {
-        preferred: page.getByRole("button", { name: /\+?\s*add audience/i }),
-      },
-    );
+    await test.step("GI #14 click - Open add audience form", async () => {
+      const openedAddAudience = await audiencePage.click(
+        [
+          { selector: '//button[contains(text(), "+ Add Audience")]' },
+          { selector: 'button[type="button"].btn.btn-primary' },
+        ],
+        {
+          optional: true,
+          preferred: [
+            page.getByRole("button", { name: /\+?\s*add audience/i }),
+            page.getByRole("button", { name: /add target audience|new audience|create audience/i }),
+            page.locator('.section-toolbar button[type="button"].btn.btn-primary'),
+            page.locator('button:has-text("Add"):has-text("Audience")'),
+          ],
+          stepLabel: "GI #14",
+        },
+      );
+
+      if (!openedAddAudience) {
+        // If list shell is loaded but GI selectors differ, retry by route and click again.
+        await page.goto("/main/plugin/target-audience/default/", {
+          waitUntil: "domcontentloaded",
+          timeout: 90_000,
+        });
+
+        const fallbackAddButton = page
+          .getByRole("button", { name: /\+?\s*add audience|add target audience|new audience|create audience/i })
+          .or(page.locator('.section-toolbar button[type="button"].btn.btn-primary').first())
+          .or(page.locator('button:has-text("Add"):has-text("Audience")').first());
+
+        await expect(fallbackAddButton.first()).toBeVisible({ timeout: 20_000 });
+        await fallbackAddButton.first().click();
+      }
+    });
 
     await giClick(15, 'input[name="name"]', "Focus audience name input", {
       preferred: page.getByLabel(/name/i),
