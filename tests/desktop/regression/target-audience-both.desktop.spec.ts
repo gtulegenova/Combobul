@@ -307,6 +307,12 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
     });
 
     await test.step("GI #12 click - Open Audiences section", async () => {
+      if (/\/login(?:\/)?$/i.test(page.url())) {
+        throw new Error(
+          "Authentication is still on /login before GI #12. Use a fresh QA_MFA_CODE and rerun; MFA code may be invalid or expired.",
+        );
+      }
+
       const openedByNavClick = await audiencePage.click(
         [
           { selector: '//a[contains(text(), "Audiences")]' },
@@ -331,6 +337,11 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
         });
       }
 
+      if (/\/login(?:\/)?$/i.test(page.url())) {
+        throw new Error(
+          "Navigation to audience page redirected to /login. Session is not authenticated; re-run with a fresh QA_MFA_CODE.",
+        );
+      }
       await expect(page).toHaveURL(/audience|target-audience/i);
     });
 
