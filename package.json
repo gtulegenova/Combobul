@@ -6,6 +6,7 @@
   "scripts": {
     "test": "playwright test",
     "test:smoke": "playwright test --grep \"@smoke\"",
+    "test:regression": "playwright test --grep \"@regression\"",
     "test:desktop": "playwright test tests/desktop",
     "test:mobile": "playwright test tests/mobile",
     "test:list": "playwright test --list",
