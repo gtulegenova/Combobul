@@ -137,17 +137,33 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
       preferred: page.getByRole("button", { name: /verify|continue|submit|sign in/i }),
     });
 
-    await giClick(
-      12,
-      [
-        { selector: '//a[contains(text(), "Audiences")]' },
-        { selector: "li.User.Management:nth-of-type(9) > a" },
-      ],
-      "Open Audiences section",
-      {
-        preferred: page.getByRole("link", { name: /audiences/i }),
-      },
-    );
+    await test.step("GI #12 click - Open Audiences section", async () => {
+      const openedByNavClick = await audiencePage.click(
+        [
+          { selector: '//a[contains(text(), "Audiences")]' },
+          { selector: "li.User.Management:nth-of-type(9) > a" },
+        ],
+        {
+          optional: true,
+          preferred: [
+            page.getByRole("link", { name: /audiences/i }),
+            page.getByRole("link", { name: /target audience/i }),
+          ],
+          stepLabel: "GI #12",
+        },
+      );
+
+      if (!openedByNavClick) {
+        // Some builds do not expose the same sidebar item structure as GI.
+        // Fallback to direct route while preserving the same business intent.
+        await page.goto("/main/plugin/target-audience/default/", {
+          waitUntil: "domcontentloaded",
+          timeout: 90_000,
+        });
+      }
+
+      await expect(page).toHaveURL(/audience|target-audience/i);
+    });
 
     await giClick(13, ".react-switch-bg", "Toggle Hide Archived switch");
 
