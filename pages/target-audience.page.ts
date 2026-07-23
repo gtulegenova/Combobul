@@ -98,7 +98,14 @@ export class TargetAudiencePage {
       throw new Error(`Unable to locate element for click: ${this.describeTarget(target, options?.stepLabel)}`);
     }
 
-    await expect(locator).toBeVisible();
+    const isVisible = await locator.isVisible().catch(() => false);
+    if (!isVisible) {
+      if (options?.optional) {
+        return false;
+      }
+      await expect(locator).toBeVisible();
+    }
+
     try {
       await locator.click();
     } catch (error) {

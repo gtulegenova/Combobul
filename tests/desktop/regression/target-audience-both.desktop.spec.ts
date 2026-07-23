@@ -189,6 +189,7 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
 
         const row = await resolveDataRow(rowIndex);
         await expect(row).toBeVisible();
+        await row.hover().catch(() => null);
 
         const clickedFallback = await audiencePage.click(".__gi-row-action-menu-fallback__", {
           optional: true,
@@ -196,6 +197,7 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
           preferred: [
             row.getByRole("button", { name: /more|action|options|menu/i }),
             row.locator("[aria-haspopup='menu']").first(),
+            row.locator("button:visible").first(),
             row.locator("td").last().locator("button").first(),
             row.locator("td").last().locator("[role='button']").first(),
             row.locator("button").last(),
