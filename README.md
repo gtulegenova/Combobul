@@ -57,6 +57,7 @@ This repository now includes an initial Playwright + TypeScript automation frame
    ```
 
 4. Update `.env` with the correct application URL and QA credentials (never commit secrets).
+   - If your login flow uses MFA, either set `QA_MFA_CODE` before a run or configure `QA_MFA_INBOX_URL` to auto-read the latest code.
 
 ## Run Commands
 

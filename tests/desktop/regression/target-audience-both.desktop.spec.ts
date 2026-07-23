@@ -4,12 +4,16 @@ import { GhostTarget, TargetAudiencePage } from "../../../pages/target-audience.
 const qaUserEmail = process.env.QA_USER_EMAIL ?? "";
 const qaUserPassword = process.env.QA_USER_PASSWORD ?? "";
 const qaMfaCode = process.env.QA_MFA_CODE ?? "";
+const qaMfaInboxUrl =
+  process.env.QA_MFA_INBOX_URL ??
+  `https://email.ghostinspector.com/${(qaUserEmail.split("@")[0] || "qatestautomation").trim()}/latest`;
 
 test.describe("Target audience lifecycle @desktop @regression @feature-target-audience", () => {
   test("QA user can add, edit, duplicate, and archive a Both audience", async ({ page }) => {
     const audiencePage = new TargetAudiencePage(page);
     const defaultAudienceName = "automation ";
     const editedAudienceName = "automation edit";
+    let resolvedMfaCode = qaMfaCode.trim();
 
     const giClick = async (
       sequence: number,
@@ -82,6 +86,40 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
           // downstream GI steps validate page readiness through actionable controls.
         }
       });
+    };
+
+    const mfaInputLocator = page
+      .getByLabel(/code|verification|mfa/i)
+      .or(page.getByPlaceholder(/code|verification|mfa/i))
+      .or(page.locator('input[name*="code" i], input[name*="mfa" i], input[type="text"]').first());
+
+    const mfaSubmitButton = page
+      .getByRole("button", { name: /verify|continue|submit|sign in|send code/i })
+      .or(page.locator("button[type='submit'], input[type='submit']").first());
+
+    const fetchLatestMfaCodeFromInbox = async (): Promise<string> => {
+      const inboxPage = await page.context().newPage();
+      try {
+        await inboxPage.goto(qaMfaInboxUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
+
+        const codeLocator = inboxPage.locator(".verification-code").first();
+        if ((await codeLocator.count()) > 0) {
+          const codeText = (await codeLocator.textContent())?.trim() ?? "";
+          if (codeText) {
+            return codeText;
+          }
+        }
+
+        const bodyText = (await inboxPage.locator("body").innerText()).trim();
+        const codeMatch = bodyText.match(/\b[A-Z0-9]{6}\b/);
+        if (codeMatch?.[0]) {
+          return codeMatch[0];
+        }
+
+        throw new Error(`No MFA code found at ${qaMfaInboxUrl}`);
+      } finally {
+        await inboxPage.close();
+      }
     };
 
     const audienceNameInput = page
@@ -269,12 +307,21 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
     });
 
     await test.step("GI #6 eval - Open Ghost Inspector email window (not replicated in Playwright)", async () => {
-      // In Playwright migration, MFA should come from QA_MFA_CODE in environment.
-      // The GI hosted email inbox flow is intentionally replaced by env-driven MFA.
+      // In this migration, we can either use QA_MFA_CODE or auto-read
+      // the latest code from the Ghost Inspector inbox URL.
     });
 
-    await test.step("GI #7 extract - Read MFA code from environment variable", async () => {
-      // Optional in GI. If MFA is not shown this stays unused.
+    await test.step("GI #7 extract - Read MFA code from environment or inbox when needed", async () => {
+      if (resolvedMfaCode) {
+        return;
+      }
+
+      if (!(await mfaInputLocator.first().isVisible().catch(() => false))) {
+        return;
+      }
+
+      resolvedMfaCode = await fetchLatestMfaCodeFromInbox();
+      await expect(resolvedMfaCode, `MFA code could not be resolved from ${qaMfaInboxUrl}`).not.toEqual("");
     });
 
     await test.step("GI #8 eval - Close temporary MFA window (no-op in Playwright)", async () => {
@@ -284,35 +331,49 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
     await giAssertPresent(9, 'input[type="text"]', "Verify MFA input appears when required", {
       optional: true,
       preferred: [
-        page.getByLabel(/code|verification|mfa/i),
-        page.getByPlaceholder(/code|verification|mfa/i),
+        mfaInputLocator,
       ],
     });
 
     await test.step("GI #10 assign - Fill MFA code when MFA input exists", async () => {
-      const filled = await audiencePage.fill('input[type="text"]', qaMfaCode, {
+      const filled = await audiencePage.fill('input[type="text"]', resolvedMfaCode, {
         optional: true,
         preferred: [
-          page.getByLabel(/code|verification|mfa/i),
-          page.getByPlaceholder(/code|verification|mfa/i),
-          page.locator('input[name*="code" i], input[name*="mfa" i]').first(),
+          mfaInputLocator,
         ],
         stepLabel: "GI #10",
       });
       if (filled) {
-        await expect(qaMfaCode, "Set QA_MFA_CODE in .env when MFA is required").not.toEqual("");
+        await expect(
+          resolvedMfaCode,
+          `Set QA_MFA_CODE or ensure QA_MFA_INBOX_URL (${qaMfaInboxUrl}) provides a valid current MFA code`,
+        ).not.toEqual("");
       }
     });
 
     await giClick(11, 'button[type="submit"]', "Submit MFA form when present", {
       optional: true,
-      preferred: page.getByRole("button", { name: /verify|continue|submit|sign in/i }),
+      preferred: mfaSubmitButton,
     });
 
     await test.step("GI #12 click - Open Audiences section", async () => {
       if (/\/login(?:\/)?$/i.test(page.url())) {
+        // Retry once with freshest inbox code to handle short-lived tokens.
+        if (await mfaInputLocator.first().isVisible().catch(() => false)) {
+          try {
+            resolvedMfaCode = await fetchLatestMfaCodeFromInbox();
+            await mfaInputLocator.first().fill(resolvedMfaCode);
+            await mfaSubmitButton.first().click();
+            await page.waitForTimeout(2_000);
+          } catch {
+            // Keep guard deterministic below.
+          }
+        }
+      }
+
+      if (/\/login(?:\/)?$/i.test(page.url())) {
         throw new Error(
-          "Authentication is still on /login before GI #12. Use a fresh QA_MFA_CODE and rerun; MFA code may be invalid or expired.",
+          `Authentication is still on /login before GI #12. Use a fresh QA_MFA_CODE or ensure QA_MFA_INBOX_URL works: ${qaMfaInboxUrl}`,
         );
       }
 
