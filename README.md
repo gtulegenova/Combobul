@@ -96,6 +96,12 @@ This repository now includes an initial Playwright + TypeScript automation frame
   npm run report:open
   ```
 
+- Run Ghost Inspector migration candidate (Add/Edit/Duplicate/Archive Both):
+
+  ```bash
+  npx playwright test tests/desktop/regression/target-audience-both.desktop.spec.ts --project=desktop-chromium
+  ```
+
 ## Playwright Project Coverage
 
 Defined in `playwright.config.ts`:
