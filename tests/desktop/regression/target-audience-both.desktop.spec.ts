@@ -16,6 +16,7 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
     const defaultAudienceName = "automation ";
     const editedAudienceName = "automation edit";
     let resolvedMfaCode = qaMfaCode.trim();
+    let activeRowForActions: any = null;
 
     const giClick = async (
       sequence: number,
@@ -196,6 +197,7 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
         }
 
         const row = await resolveDataRow(rowIndex, rowNameHint);
+        activeRowForActions = row;
         await expect(row).toBeVisible();
         await row.hover().catch(() => null);
         const actionCell = row.locator("td").last();
@@ -244,12 +246,35 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
           stepLabel: `GI #${sequence}`,
           preferred: [
             preferredByName ? page.getByRole("button", { name: preferredByName }) : undefined,
+            preferredByName ? page.getByRole("menuitem", { name: preferredByName }) : undefined,
+            preferredByName ? page.getByText(preferredByName).first() : undefined,
             page.locator(".action-menu > button").nth(menuButtonIndex - 1),
             page.locator(".action-menu button").nth(menuButtonIndex - 1),
+            page.locator(".action-menu [role='menuitem']").nth(menuButtonIndex - 1),
             page.locator("[role='menu'] button").nth(menuButtonIndex - 1),
+            page.locator("[role='menu'] [role='menuitem']").nth(menuButtonIndex - 1),
             page.locator(".dropdown-menu button").nth(menuButtonIndex - 1),
+            page.locator(".dropdown-menu a").nth(menuButtonIndex - 1),
           ].filter(Boolean),
         });
+
+        if (!clicked && activeRowForActions) {
+          const actionCell = activeRowForActions.locator("td").last();
+          const clickedInlineFallback = await audiencePage.click(".__gi-action-inline-fallback__", {
+            optional: true,
+            stepLabel: `GI #${sequence}`,
+            preferred: [
+              preferredByName ? actionCell.getByRole("button", { name: preferredByName }) : undefined,
+              preferredByName ? actionCell.getByRole("menuitem", { name: preferredByName }) : undefined,
+              preferredByName ? actionCell.getByText(preferredByName).first() : undefined,
+              actionCell.locator("button:visible").nth(menuButtonIndex - 1),
+              actionCell.locator("a:visible").nth(menuButtonIndex - 1),
+            ].filter(Boolean),
+          });
+          if (clickedInlineFallback) {
+            return;
+          }
+        }
 
         if (!clicked) {
           throw new Error(`GI #${sequence}: unable to click action-menu button index ${menuButtonIndex}.`);
@@ -276,6 +301,7 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
         }
 
         const row = await resolveDataRow(rowIndex);
+        activeRowForActions = row;
         const actionCell = row.locator("td").last();
         const clickedFallback = await audiencePage.click(".__gi-inline-action-button-fallback__", {
           optional: true,
