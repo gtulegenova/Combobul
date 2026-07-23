@@ -84,6 +84,37 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
       });
     };
 
+    const audienceNameInput = page
+      .getByLabel(/name/i)
+      .or(page.getByPlaceholder(/audience name|name/i))
+      .or(page.locator('input[name="name"], input[id*="name" i], input[placeholder*="name" i]').first());
+
+    const ensureAudienceCreateFormIsOpen = async (stepLabel: string): Promise<void> => {
+      if (await audienceNameInput.first().isVisible().catch(() => false)) {
+        return;
+      }
+
+      const addAudienceButton = page
+        .getByRole("button", { name: /\+?\s*add audience|add target audience|new audience|create audience/i })
+        .or(page.locator('.section-toolbar button[type="button"].btn.btn-primary').first())
+        .or(page.locator('button:has-text("Add"):has-text("Audience")').first());
+
+      if (await addAudienceButton.first().isVisible().catch(() => false)) {
+        await addAudienceButton.first().click();
+      } else {
+        await page.goto("/main/plugin/target-audience/default/", {
+          waitUntil: "domcontentloaded",
+          timeout: 90_000,
+        });
+        await expect(addAudienceButton.first()).toBeVisible({ timeout: 20_000 });
+        await addAudienceButton.first().click();
+      }
+
+      await expect(audienceNameInput.first(), `${stepLabel}: audience name input should be visible after opening add form`).toBeVisible({
+        timeout: 20_000,
+      });
+    };
+
     await test.step("GI #0 open - Navigate to login URL", async () => {
       await page.goto("/login", { waitUntil: "domcontentloaded", timeout: 90_000 });
       await expect(page).toHaveURL(/login|signin|auth/i);
@@ -221,13 +252,17 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
         await expect(fallbackAddButton.first()).toBeVisible({ timeout: 20_000 });
         await fallbackAddButton.first().click();
       }
+
+      await ensureAudienceCreateFormIsOpen("GI #14");
     });
 
-    await giClick(15, 'input[name="name"]', "Focus audience name input", {
-      preferred: page.getByLabel(/name/i),
+    await test.step("GI #15 click - Focus audience name input", async () => {
+      await ensureAudienceCreateFormIsOpen("GI #15");
+      await audienceNameInput.first().click();
     });
-    await giFill(16, 'input[name="name"]', defaultAudienceName, 'Set audience name to "automation "', {
-      preferred: page.getByLabel(/name/i),
+    await test.step('GI #16 assign - Set audience name to "automation "', async () => {
+      await ensureAudienceCreateFormIsOpen("GI #16");
+      await audienceNameInput.first().fill(defaultAudienceName);
     });
 
     await giClick(17, "div.form-group:nth-of-type(2) > label", "Open second form group label");
