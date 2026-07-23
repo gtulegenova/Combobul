@@ -261,8 +261,11 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
       preferred: page.getByRole("button", { name: /sign in|log in|login|send code/i }),
     });
 
-    await test.step("GI #5 pause - Wait 30000ms for post-login and MFA flow", async () => {
-      await audiencePage.pause(30_000);
+    const postLoginMfaWaitMs = qaMfaCode ? 2_000 : 30_000;
+    await test.step(`GI #5 pause - Wait ${postLoginMfaWaitMs}ms for post-login and MFA flow`, async () => {
+      // If MFA code is already provided via env, avoid long waits that can let
+      // short-lived codes expire before they are submitted.
+      await audiencePage.pause(postLoginMfaWaitMs);
     });
 
     await test.step("GI #6 eval - Open Ghost Inspector email window (not replicated in Playwright)", async () => {
