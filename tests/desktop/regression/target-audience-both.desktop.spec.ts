@@ -115,6 +115,123 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
       });
     };
 
+    const resolveDataRow = async (rowIndex: number): Promise<any> => {
+      const rowCandidates = [
+        page.locator("table tbody tr"),
+        page.locator(".MuiDataGrid-row"),
+        page.locator("[role='row']").filter({ has: page.locator("td, [role='cell']") }),
+      ];
+
+      for (const candidate of rowCandidates) {
+        if ((await candidate.count()) > rowIndex) {
+          return candidate.nth(rowIndex);
+        }
+      }
+
+      throw new Error(`Unable to resolve data row at index ${rowIndex} for target audience grid.`);
+    };
+
+    const openRowActionMenu = async (
+      sequence: number,
+      description: string,
+      rowIndex: number,
+      legacyTarget: GhostTarget,
+    ): Promise<void> => {
+      await test.step(`GI #${sequence} click - ${description}`, async () => {
+        const stepLabel = `GI #${sequence}`;
+        const clickedLegacy = await audiencePage.click(legacyTarget, {
+          optional: true,
+          stepLabel,
+        });
+        if (clickedLegacy) {
+          return;
+        }
+
+        const row = await resolveDataRow(rowIndex);
+        await expect(row).toBeVisible();
+
+        const clickedFallback = await audiencePage.click(".__gi-row-action-menu-fallback__", {
+          optional: true,
+          stepLabel,
+          preferred: [
+            row.getByRole("button", { name: /more|action|options|menu/i }),
+            row.locator("[aria-haspopup='menu']").first(),
+            row.locator("td").last().locator("button").first(),
+            row.locator("td").last().locator("[role='button']").first(),
+            row.locator("button").last(),
+          ],
+        });
+
+        if (!clickedFallback) {
+          throw new Error(`${stepLabel}: unable to open row action menu for row index ${rowIndex}.`);
+        }
+      });
+    };
+
+    const clickActionMenuButton = async (
+      sequence: number,
+      description: string,
+      menuButtonIndex: number,
+      preferredByName?: RegExp,
+    ): Promise<void> => {
+      await test.step(`GI #${sequence} click - ${description}`, async () => {
+        const clicked = await audiencePage.click(".__gi-action-menu-button-fallback__", {
+          optional: true,
+          stepLabel: `GI #${sequence}`,
+          preferred: [
+            preferredByName ? page.getByRole("button", { name: preferredByName }) : undefined,
+            page.locator(".action-menu > button").nth(menuButtonIndex - 1),
+            page.locator(".action-menu button").nth(menuButtonIndex - 1),
+            page.locator("[role='menu'] button").nth(menuButtonIndex - 1),
+            page.locator(".dropdown-menu button").nth(menuButtonIndex - 1),
+          ].filter(Boolean),
+        });
+
+        if (!clicked) {
+          throw new Error(`GI #${sequence}: unable to click action-menu button index ${menuButtonIndex}.`);
+        }
+      });
+    };
+
+    const clickRowInlineActionButton = async (
+      sequence: number,
+      description: string,
+      rowIndex: number,
+      inlineButtonIndex: number,
+      legacyTarget: GhostTarget,
+      preferredByName?: RegExp,
+    ): Promise<void> => {
+      await test.step(`GI #${sequence} click - ${description}`, async () => {
+        const stepLabel = `GI #${sequence}`;
+        const clickedLegacy = await audiencePage.click(legacyTarget, {
+          optional: true,
+          stepLabel,
+        });
+        if (clickedLegacy) {
+          return;
+        }
+
+        const row = await resolveDataRow(rowIndex);
+        const actionCell = row.locator("td").last();
+        const clickedFallback = await audiencePage.click(".__gi-inline-action-button-fallback__", {
+          optional: true,
+          stepLabel,
+          preferred: [
+            preferredByName ? actionCell.getByRole("button", { name: preferredByName }) : undefined,
+            actionCell.locator("button").nth(inlineButtonIndex - 1),
+            actionCell.locator("[role='button']").nth(inlineButtonIndex - 1),
+            row.locator("button").nth(inlineButtonIndex - 1),
+          ].filter(Boolean),
+        });
+
+        if (!clickedFallback) {
+          throw new Error(
+            `${stepLabel}: unable to click inline action button ${inlineButtonIndex} on row index ${rowIndex}.`,
+          );
+        }
+      });
+    };
+
     await test.step("GI #0 open - Navigate to login URL", async () => {
       await page.goto("/login", { waitUntil: "domcontentloaded", timeout: 90_000 });
       await expect(page).toHaveURL(/login|signin|auth/i);
@@ -313,12 +430,13 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
       await audiencePage.pause(3_000);
     });
 
-    await giClick(
+    await openRowActionMenu(
       26,
-      '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[3]/div/table/tbody/tr/td[5]/div/div[1]',
       "Open row action menu",
+      0,
+      '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[3]/div/table/tbody/tr/td[5]/div/div[1]',
     );
-    await giClick(27, ".action-menu > button[type=\"button\"].btn.btn-primary:nth-of-type(3)", "Start publish action from menu");
+    await clickActionMenuButton(27, "Start publish action from menu", 3, /publish/i);
 
     await giAssertText(28, ".modal-title", "Publish", "Verify first publish modal title");
     await giAssertText(
@@ -362,10 +480,13 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
       },
     );
 
-    await giClick(
+    await clickRowInlineActionButton(
       36,
-      '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[3]/div/table/tbody/tr/td[5]/div/div[2]/button[1]',
       "Open edit action for current audience",
+      0,
+      1,
+      '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[3]/div/table/tbody/tr/td[5]/div/div[2]/button[1]',
+      /edit/i,
     );
     await giClick(37, 'input[name="name"]', "Focus audience name for edit", {
       preferred: page.getByLabel(/name/i),
@@ -391,12 +512,13 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
       await audiencePage.pause(3_500);
     });
 
-    await giClick(
+    await openRowActionMenu(
       42,
-      '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[3]/div/table/tbody/tr/td[5]/div/div[1]',
       "Open row action menu after edit",
+      0,
+      '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[3]/div/table/tbody/tr/td[5]/div/div[1]',
     );
-    await giClick(43, ".action-menu > button[type=\"button\"].btn.btn-primary:nth-of-type(3)", "Publish edited audience");
+    await clickActionMenuButton(43, "Publish edited audience", 3, /publish/i);
 
     await giClick(
       44,
@@ -439,12 +561,13 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
     );
     await giAssertText(51, "label > div > span", "Hide Archived", "Verify hide archived label text");
 
-    await giClick(
+    await openRowActionMenu(
       52,
-      '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[3]/div/table/tbody/tr/td[5]/div/div[1]',
       "Open row actions before duplicate/archive validation",
+      0,
+      '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[3]/div/table/tbody/tr/td[5]/div/div[1]',
     );
-    await giClick(53, ".action-menu > button[type=\"button\"].btn.btn-primary:nth-of-type(4)", "Select action menu item #4");
+    await clickActionMenuButton(53, "Select action menu item #4", 4);
     await giClick(
       54,
       [
@@ -461,17 +584,28 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
       55,
       '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[1]/div/div[2]/div[1]/div/div/div[1]',
       "Click first filter/dropdown control before cleanup",
+      {
+        optional: true,
+        preferred: [
+          page.getByRole("combobox").first(),
+          page.locator("[class*='select']").first(),
+        ],
+      },
     );
 
-    await giClick(
+    await openRowActionMenu(
       56,
-      '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[3]/div/table/tbody/tr[2]/td[5]/div/div[1]',
       "Open second row action menu",
+      1,
+      '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[3]/div/table/tbody/tr[2]/td[5]/div/div[1]',
     );
-    await giClick(
+    await clickRowInlineActionButton(
       57,
-      '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[3]/div/table/tbody/tr[2]/td[5]/div/div[2]/button[3]',
       "Trigger archive action on second row",
+      1,
+      3,
+      '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[3]/div/table/tbody/tr[2]/td[5]/div/div[2]/button[3]',
+      /archive|delete/i,
     );
     await giClick(
       58,
@@ -485,27 +619,35 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
       },
     );
 
-    await giClick(
+    await openRowActionMenu(
       59,
-      '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[3]/div/table/tbody/tr[1]/td[5]/div/div[1]',
       "Open first row action menu",
+      0,
+      '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[3]/div/table/tbody/tr[1]/td[5]/div/div[1]',
     );
-    await giClick(
+    await clickRowInlineActionButton(
       60,
-      '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[3]/div/table/tbody/tr[1]/td[5]/div/div[2]/button[2]',
       "Trigger duplicate/archive-related action on first row",
+      0,
+      2,
+      '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[3]/div/table/tbody/tr[1]/td[5]/div/div[2]/button[2]',
+      /duplicate|archive|delete/i,
     );
     await giClick(61, "body > div.modal.show > div > div > div.modal-footer > button.btn.btn-primary", "Confirm first row modal action");
 
-    await giClick(
+    await openRowActionMenu(
       62,
-      '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[3]/div/table/tbody/tr/td[5]/div/div[1]',
       "Open remaining row action menu",
+      0,
+      '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[3]/div/table/tbody/tr/td[5]/div/div[1]',
     );
-    await giClick(
+    await clickRowInlineActionButton(
       63,
-      '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[3]/div/table/tbody/tr/td[5]/div/div[2]/button[2]',
       "Trigger final cleanup action",
+      0,
+      2,
+      '//*[@id="page-content-wrapper"]/div/div/div/div/target-audience-list-page/div[3]/div/div/div[3]/div/table/tbody/tr/td[5]/div/div[2]/button[2]',
+      /archive|delete/i,
     );
     await giClick(64, "body > div.modal.show > div > div > div.modal-footer > button.btn.btn-primary", "Confirm final cleanup action");
 
