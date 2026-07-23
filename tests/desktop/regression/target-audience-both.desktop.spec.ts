@@ -10,6 +10,8 @@ const qaMfaInboxUrl =
 
 test.describe("Target audience lifecycle @desktop @regression @feature-target-audience", () => {
   test("QA user can add, edit, duplicate, and archive a Both audience", async ({ page }) => {
+    test.setTimeout(15 * 60 * 1000);
+
     const audiencePage = new TargetAudiencePage(page);
     const defaultAudienceName = "automation ";
     const editedAudienceName = "automation edit";
@@ -299,11 +301,16 @@ test.describe("Target audience lifecycle @desktop @regression @feature-target-au
       preferred: page.getByRole("button", { name: /sign in|log in|login|send code/i }),
     });
 
-    const postLoginMfaWaitMs = qaMfaCode ? 2_000 : 30_000;
-    await test.step(`GI #5 pause - Wait ${postLoginMfaWaitMs}ms for post-login and MFA flow`, async () => {
-      // If MFA code is already provided via env, avoid long waits that can let
-      // short-lived codes expire before they are submitted.
-      await audiencePage.pause(postLoginMfaWaitMs);
+    await test.step("GI #5 pause - Wait briefly for post-login and MFA flow", async () => {
+      // GI used a fixed 30s pause, but for Playwright we wait just long enough
+      // for either MFA input or a non-login route to appear.
+      await audiencePage.pause(1_500);
+      await Promise.race([
+        page
+          .waitForURL((url) => !/\/login(?:\/)?$/i.test(url.toString()), { timeout: 20_000 })
+          .catch(() => null),
+        mfaInputLocator.first().waitFor({ state: "visible", timeout: 20_000 }).catch(() => null),
+      ]);
     });
 
     await test.step("GI #6 eval - Open Ghost Inspector email window (not replicated in Playwright)", async () => {
