@@ -1,5 +1,7 @@
 import { expect, Locator, Page } from "@playwright/test";
 
+export type GhostTarget = string | Array<{ selector: string }>;
+
 export class TargetAudiencePage {
   private readonly page: Page;
 
@@ -84,6 +86,78 @@ export class TargetAudiencePage {
     await expect(this.rowByName(name)).toHaveCount(0);
   }
 
+  async click(
+    target: GhostTarget,
+    options?: { optional?: boolean; preferred?: Locator | Locator[]; stepLabel?: string },
+  ): Promise<boolean> {
+    const locator = await this.resolveFirstLocator(options?.preferred, target);
+    if (!locator) {
+      if (options?.optional) {
+        return false;
+      }
+      throw new Error(`Unable to locate element for click: ${this.describeTarget(target, options?.stepLabel)}`);
+    }
+
+    await expect(locator).toBeVisible();
+    await locator.click();
+    return true;
+  }
+
+  async fill(
+    target: GhostTarget,
+    value: string,
+    options?: { optional?: boolean; preferred?: Locator | Locator[]; stepLabel?: string },
+  ): Promise<boolean> {
+    const locator = await this.resolveFirstLocator(options?.preferred, target);
+    if (!locator) {
+      if (options?.optional) {
+        return false;
+      }
+      throw new Error(`Unable to locate element for fill: ${this.describeTarget(target, options?.stepLabel)}`);
+    }
+
+    await expect(locator).toBeVisible();
+    await locator.fill(value);
+    return true;
+  }
+
+  async assertElementPresent(
+    target: GhostTarget,
+    options?: { optional?: boolean; preferred?: Locator | Locator[]; stepLabel?: string },
+  ): Promise<boolean> {
+    const locator = await this.resolveFirstLocator(options?.preferred, target);
+    if (!locator) {
+      if (options?.optional) {
+        return false;
+      }
+      throw new Error(`Unable to locate element for assertion: ${this.describeTarget(target, options?.stepLabel)}`);
+    }
+
+    await expect(locator).toBeVisible();
+    return true;
+  }
+
+  async assertTextPresent(
+    target: GhostTarget,
+    text: string,
+    options?: { optional?: boolean; preferred?: Locator | Locator[]; stepLabel?: string },
+  ): Promise<boolean> {
+    const locator = await this.resolveFirstLocator(options?.preferred, target);
+    if (!locator) {
+      if (options?.optional) {
+        return false;
+      }
+      throw new Error(`Unable to locate element for text assertion: ${this.describeTarget(target, options?.stepLabel)}`);
+    }
+
+    await expect(locator).toContainText(text);
+    return true;
+  }
+
+  async pause(ms: number): Promise<void> {
+    await this.page.waitForTimeout(ms);
+  }
+
   private rowByName(name: string): Locator {
     return this.page
       .locator("tr, [role='row'], .MuiDataGrid-row")
@@ -99,5 +173,49 @@ export class TargetAudiencePage {
 
     await expect(actionButton).toBeVisible();
     await actionButton.click();
+  }
+
+  private describeTarget(target: GhostTarget, label?: string): string {
+    const selectors = this.selectorsFromTarget(target).join(" OR ");
+    return label ? `${label} -> ${selectors}` : selectors;
+  }
+
+  private selectorsFromTarget(target: GhostTarget): string[] {
+    if (typeof target === "string") {
+      return [target];
+    }
+    return target.map((item) => item.selector);
+  }
+
+  private toLocator(selector: string): Locator {
+    const trimmed = selector.trim();
+    if (trimmed.startsWith("//") || trimmed.startsWith("(") || trimmed.startsWith("xpath=") || trimmed.startsWith("/")) {
+      return this.page.locator(trimmed.startsWith("xpath=") ? trimmed : `xpath=${trimmed}`);
+    }
+    return this.page.locator(trimmed);
+  }
+
+  private async resolveFirstLocator(preferred: Locator | Locator[] | undefined, target: GhostTarget): Promise<Locator | null> {
+    const preferredList = Array.isArray(preferred) ? preferred : preferred ? [preferred] : [];
+    const targetLocators = this.selectorsFromTarget(target).map((selector) => this.toLocator(selector));
+    const candidates = [...preferredList, ...targetLocators];
+
+    for (const locator of candidates) {
+      if ((await locator.count()) === 0) {
+        continue;
+      }
+      const first = locator.first();
+      if (await first.isVisible().catch(() => false)) {
+        return first;
+      }
+    }
+
+    for (const locator of candidates) {
+      if ((await locator.count()) > 0) {
+        return locator.first();
+      }
+    }
+
+    return null;
   }
 }
